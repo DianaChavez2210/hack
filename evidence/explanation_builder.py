@@ -1,15 +1,16 @@
 """
 Módulo de Explicabilidad Clínica (ExplanationBuilder).
-Genera explicaciones locales, estructuradas y deterministas en español a partir del CDM.
+Genera explicaciones locales, estructuradas y deterministas en español a partir del CDM y pesos de características / SHAP.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+import numpy as np
 
 
 class ExplanationBuilder:
     """
     Generador local y determinista de justificaciones clínicas en español.
-    Usa la información real del Common Data Model sin inventar ni alucinar datos.
+    Soporta valores SHAP y rankings de importancia de características para explicabilidad médica.
     """
     def __init__(self):
         # Mapeo de códigos a términos clínicos claros en español
@@ -22,7 +23,10 @@ class ExplanationBuilder:
             "SBP": "Presión Arterial Sistólica",
             "DBP": "Presión Arterial Diastólica",
             "GLUCOSE": "Glucosa",
-            "STEPS": "Pasos"
+            "STEPS": "Pasos",
+            "WBC": "Leucocitos",
+            "LACTATE": "Lactato",
+            "CREATININE": "Creatinina"
         }
 
     def generate_explanation(
@@ -31,10 +35,11 @@ class ExplanationBuilder:
         priority_level: str,
         decision_datetime: str,
         evidence_entries: List[Dict[str, Any]],
-        cdm_records: List[Any]
+        cdm_records: List[Any],
+        top_features: Optional[List[Dict[str, Any]]] = None
     ) -> str:
         """
-        Construye una explicación clínica detallada a partir de los roles asignados a cada registro de evidencia.
+        Construye una explicación clínica detallada a partir de las evidencias y las principales características predictivas (SHAP).
         """
         primary_findings = []
         supporting_findings = []
@@ -86,6 +91,16 @@ class ExplanationBuilder:
 
         # Redacción de la explicación determinista
         parts = [f"Prioridad {priority_level} para el paciente {patient_id} a las {decision_datetime}."]
+
+        if top_features:
+            shap_desc = []
+            for feat in top_features[:3]:
+                fname = feat.get("feature_name", "")
+                fval = feat.get("value")
+                if fval is not None:
+                    shap_desc.append(f"{fname}={fval:.2f}")
+            if shap_desc:
+                parts.append("Factores predictivos clave (SHAP): " + ", ".join(shap_desc) + ".")
 
         if primary_findings:
             parts.append("Hallazgos principales: " + ", ".join(primary_findings) + ".")

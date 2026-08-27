@@ -32,6 +32,18 @@ wheels/
 .installed.cfg
 *.egg
 
+# --- Node.js & Frontend Build Artifacts ---
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
 # --- Datasets Masivos y Archivos de Origen ---
 01_RISA_DATA_V1_0/
 *.zip
@@ -43,6 +55,7 @@ wheels/
 data/raw/*
 data/clean/*
 data/features/*
+data/logs/*.log
 !data/raw/nada.txt
 !data/raw/.gitkeep
 !data/clean/nada.txt
@@ -51,6 +64,14 @@ data/features/*
 !data/features/.gitkeep
 !data/catalogs/nada.txt
 !data/catalogs/.gitkeep
+!data/logs/nada.txt
+!data/logs/.gitkeep
+
+# --- Base de Datos Locales ---
+*.db
+*.sqlite
+*.sqlite3
+*.duckdb
 
 # --- Resultados Generados (results/) ---
 results/signals.csv

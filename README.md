@@ -147,7 +147,47 @@ python validate_submission.py --signals results/signals.csv --evidence results/e
 
 ---
 
-## 4. Las 13 Reglas de Validación e Integridad
+## 4. Fase 4: Servidor API Backend (FastAPI) y Dashboard Clínico (React SPA)
+
+La **Fase 4** provee una **API REST Backend en FastAPI (`app/`)** y un **Dashboard Clínico Frontend en React (`frontend/`)** con triaje en tiempo real, alertas de red/hardware diferenciadas y auditoría de linaje de evidencias con factores SHAP.
+
+### 4.1 Iniciar el Backend API (FastAPI + Uvicorn)
+
+Para iniciar el servidor backend en `http://localhost:8000`:
+
+```powershell
+python run_api.py
+```
+
+- **Swagger / OpenAPI interactivo:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **ReDoc interactivo:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+#### Endpoints Principales:
+- `GET /api/v1/patients`: Lista priorizada de pacientes con filtros operacionales (`care_program`, `priority_level`).
+- `GET /api/v1/patients/{patient_id}`: Ficha clínica maestra (demografía, comorbilidades, fármacos, dispositivos).
+- `GET /api/v1/patients/{patient_id}/timeline`: Serie temporal fisiológica (vitals, wearables, labs, reposo/sueño).
+- `GET /api/v1/signals`: Consulta de alertas de riesgo clínico generadas por el modelo predictivo.
+- `GET /api/v1/signals/{signal_id}/evidence`: Grafo de linaje de evidencia trazable a registros CDM originales ($T_{\text{available}} \le T_{\text{decision}}$) y contribuciones SHAP.
+- `GET /api/v1/alerts/technical`: Notificaciones diferenciadas de fallas de red, pérdida de paquetes y baja calidad de señal.
+
+---
+
+### 4.2 Abrir el Dashboard Clínico (React SPA)
+
+El frontend está listo en **`frontend/index.html`** y no requiere compilación previa:
+
+1. **Opción 1 (Directa):** Abre `frontend/index.html` en cualquier navegador web.
+2. **Opción 2 (Servidor Vite):**
+   ```powershell
+   cd frontend
+   npm install
+   npm run dev
+   ```
+   Navega a `http://localhost:5173`.
+
+---
+
+## 5. Las 13 Reglas de Validación e Integridad
 
 El pipeline aplica automáticamente las 13 reglas de calidad clínica e integridad referencial:
 
