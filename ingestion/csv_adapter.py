@@ -95,15 +95,6 @@ class RISACSVAdapter(BaseHospitalAdapter):
             # 1. Tabla de Dispositivos (devices.csv)
             if "devices" in source_file:
                 dev_id = cleaned_payload.get("device_id") or raw.record_id
-                rel_class = cleaned_payload.get("reliability_class", "")
-                active_val = cleaned_payload.get("active", "True")
-                
-                q_flag = "OK"
-                if rel_class == "R3_VARIABLE":
-                    q_flag = "VARIABLE_RELIABILITY"
-                elif str(active_val).lower() in ("false", "0"):
-                    q_flag = "INACTIVE_DEVICE"
-
                 cdm_records.append(CDMRecord(
                     record_id=str(dev_id),
                     patient_id=cleaned_payload.get("assigned_patient_id") or "",
@@ -112,10 +103,11 @@ class RISACSVAdapter(BaseHospitalAdapter):
                     source_file=raw.source_file,
                     source_system=cleaned_payload.get("manufacturer_class", "DEVICE_GATEWAY"),
                     variable_code=cleaned_payload.get("device_type", "DEVICE"),
-                    quality_flag=q_flag,
+                    value_text=cleaned_payload.get("model_family") or cleaned_payload.get("device_type"),
+                    quality_flag="OK",
                     is_observed=True,
                     header_fields=cleaned_payload,
-                    null_fields=null_fields
+                    null_fields=[]
                 ))
 
             # 2. Signos Vitales (vital_signs.csv)
