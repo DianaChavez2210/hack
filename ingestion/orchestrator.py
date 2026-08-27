@@ -9,11 +9,6 @@ from collections import Counter
 from ingestion.models import AuditEntry
 from ingestion.factory import HospitalIngestionFactory
 from ingestion.sinks import RawStorageSink, CleanStorageSink, AuditStorageSink
-from pipeline.validation import SchemaValidator
-from pipeline.cleaning import DataCleaner
-from pipeline.normalization import UnitNormalizer, PlausibilityChecker
-from pipeline.temporal import TemporalProcessor
-from pipeline.contextualizer import Contextualizer
 
 
 class IngestionOrchestrator:
@@ -29,6 +24,12 @@ class IngestionOrchestrator:
         units_catalog_path: Optional[str] = None,
         variable_catalog_path: Optional[str] = None
     ):
+        from pipeline.validation import SchemaValidator
+        from pipeline.cleaning import DataCleaner
+        from pipeline.normalization import UnitNormalizer, PlausibilityChecker
+        from pipeline.temporal import TemporalProcessor
+        from pipeline.contextualizer import Contextualizer
+
         self.raw_sink = raw_sink or RawStorageSink()
         self.clean_sink = clean_sink or CleanStorageSink()
         self.audit_sink = audit_sink or AuditStorageSink()
