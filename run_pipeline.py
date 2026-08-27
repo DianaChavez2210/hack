@@ -1,7 +1,7 @@
 """
 Punto de Entrada CLI para el Pipeline de Ingesta y Calidad de Datos (RISA Data V1.0).
-Soporta procesamiento streaming por lotes (chunking de 50,000 registros por defecto)
-para optimizar el uso de memoria RAM y acelerar la validación de integridad referencial.
+Soporta procesamiento multinúcleo en paralelo (Multiprocessing) y streaming por lotes
+(chunking de 50,000 registros por defecto) para maximizar la velocidad y optimizar la memoria RAM.
 """
 
 import os
@@ -69,10 +69,12 @@ def run_risa_ingestion(
     dataset_dir: str = "01_RISA_DATA_V1_0",
     max_rows_per_table: Optional[int] = None,
     table_filter: str = "all",
-    chunk_size: int = 50000
+    chunk_size: int = 50000,
+    parallel: bool = True,
+    workers: Optional[int] = None
 ):
     """
-    Ejecuta el pipeline de ingesta por lotes para todas las tablas de RISA Data V1.0.
+    Ejecuta el pipeline de ingesta por lotes (con paralelismo multinúcleo opcional) para RISA Data V1.0.
     """
     base_path = Path(dataset_dir)
     if not base_path.exists():
@@ -113,12 +115,14 @@ def run_risa_ingestion(
     ]
 
     effective_max_rows = None if not max_rows_per_table or max_rows_per_table <= 0 else max_rows_per_table
+    num_workers_str = f"{workers or os.cpu_count() or 4} procesadores" if parallel else "Modo Secuencial"
 
     print("=" * 70)
-    print("  HEALTHSIGNAL LATAM — SISTEMA DE INGESTA Y CALIDAD DE DATOS (STREAMING)")
+    print("  HEALTHSIGNAL LATAM — INGESTA MULTINUCLEO Y CALIDAD DE DATOS (PARALLEL STREAMING)")
     print(f"  Directorio Fuente: {dataset_dir}")
+    print(f"  Modo de Ejecución: {num_workers_str}")
     print(f"  Tamaño de Lote (Chunk Size): {chunk_size} registros por batch")
-    print(f"  Modo: {'TODOS LOS REGISTROS (COMPLETO)' if effective_max_rows is None else f'Muestra (Máx {effective_max_rows} filas por tabla)'}")
+    print(f"  Filtro de Filas: {'TODOS LOS REGISTROS (COMPLETO)' if effective_max_rows is None else f'Muestra (Máx {effective_max_rows} filas por tabla)'}")
     print("=" * 70)
 
     results = []
@@ -132,21 +136,36 @@ def run_risa_ingestion(
             print(f"[WARN] Archivo no encontrado: {file_path}. Saltando...")
             continue
 
-        print(f"\n[INFO] Procesando por lotes (streaming): {rel_path}...")
+        mode_desc = f"multinúcleo ({num_workers_str})" if parallel else "secuencial"
+        print(f"\n[INFO] Procesando por lotes ({mode_desc}): {rel_path}...")
         try:
-            res = orchestrator.process_and_save_stream(
-                source_type="RISA_CSV",
-                hospital_id=hospital_id,
-                source_config={
-                    "file_path": str(file_path),
-                    "max_rows": effective_max_rows
-                },
-                dataset_name=dataset_name,
-                chunk_size=chunk_size
-            )
+            if parallel:
+                res = orchestrator.process_and_save_parallel(
+                    source_type="RISA_CSV",
+                    hospital_id=hospital_id,
+                    source_config={
+                        "file_path": str(file_path),
+                        "max_rows": effective_max_rows
+                    },
+                    dataset_name=dataset_name,
+                    chunk_size=chunk_size,
+                    max_workers=workers
+                )
+            else:
+                res = orchestrator.process_and_save_stream(
+                    source_type="RISA_CSV",
+                    hospital_id=hospital_id,
+                    source_config={
+                        "file_path": str(file_path),
+                        "max_rows": effective_max_rows
+                    },
+                    dataset_name=dataset_name,
+                    chunk_size=chunk_size
+                )
             results.append(res)
             chunks_str = f" en {res.get('chunks_processed', 1)} lotes" if res.get('chunks_processed') else ""
-            print(f"  [OK] RAW guardado en: {res['raw_path']} ({res['raw_count']} registros{chunks_str})")
+            workers_str = f" con {res.get('workers_used')} núcleos" if res.get('workers_used') else ""
+            print(f"  [OK] RAW guardado en: {res['raw_path']} ({res['raw_count']} registros{chunks_str}{workers_str})")
             print(f"  [OK] CLEAN JSONL: {res['clean_jsonl_path']}")
             print(f"  [OK] CLEAN CSV:   {res['clean_csv_path']} ({res['clean_count']} registros limpios)")
             if res.get('audit_path'):
@@ -162,23 +181,28 @@ def run_risa_ingestion(
     print("=" * 70)
     for r in results:
         actions_str = ", ".join(f"{k}={v}" for k, v in r["audit_actions"].items()) if r.get("audit_actions") else "Sin incidencias"
-        print(f"  * {r['source_type']} [{r['hospital_id']}]: RAW={r['raw_count']} | CLEAN={r['clean_count']} (Lotes={r.get('chunks_processed', 1)}) | Inválidos={r['invalid_schema_count']}")
+        w_info = f" (Núcleos={r.get('workers_used', 1)})" if r.get('workers_used') else ""
+        print(f"  * {r['source_type']} [{r['hospital_id']}]: RAW={r['raw_count']} | CLEAN={r['clean_count']} (Lotes={r.get('chunks_processed', 1)}{w_info}) | Inválidos={r['invalid_schema_count']}")
         if r.get('audit_path'):
             print(f"    Auditoría Log: {r['audit_entries_count']} eventos ({actions_str}) -> {r['audit_path']}")
     print("=" * 70)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Pipeline de Ingesta RISA Data V1.0 (Procesamiento por Lotes)")
+    parser = argparse.ArgumentParser(description="Pipeline de Ingesta RISA Data V1.0 (Procesamiento Multinúcleo por Lotes)")
     parser.add_argument("--data-dir", type=str, default="01_RISA_DATA_V1_0", help="Ruta al dataset")
     parser.add_argument("--max-rows", type=int, default=0, help="Filas máximas a procesar (0 = procesar TODOS los datos)")
     parser.add_argument("--table", type=str, default="all", help="Filtro de tabla (vitals, wearables, lab, all)")
     parser.add_argument("--chunk-size", type=int, default=50000, help="Tamaño del lote/batch en registros (default: 50000)")
+    parser.add_argument("--workers", type=int, default=None, help="Número de procesos de trabajo en paralelo (default: número de núcleos del sistema)")
+    parser.add_argument("--no-parallel", action="store_true", help="Desactivar el procesamiento paralelo y ejecutar en modo secuencial")
     args = parser.parse_args()
 
     run_risa_ingestion(
         dataset_dir=args.data_dir,
         max_rows_per_table=args.max_rows if args.max_rows > 0 else None,
         table_filter=args.table,
-        chunk_size=args.chunk_size
+        chunk_size=args.chunk_size,
+        parallel=not args.no_parallel,
+        workers=args.workers
     )

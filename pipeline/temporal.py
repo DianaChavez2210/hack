@@ -128,6 +128,11 @@ class TemporalProcessor:
         if not dt_str or str(dt_str).strip() in ("", "None", "null"):
             return None
         dt_clean = str(dt_str).strip()
+        try:
+            return datetime.fromisoformat(dt_clean)
+        except ValueError:
+            pass
+
         for fmt in (
             "%Y-%m-%d %H:%M:%S.%f",
             "%Y-%m-%d %H:%M:%S",
