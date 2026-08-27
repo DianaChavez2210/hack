@@ -498,45 +498,63 @@ function IncidenceDetailView({ signalId, patientId, onBack, onOpenPatientHistory
         </button>
       </div>
 
-      {/* Critical Narrative Box: "¿Qué Salió Mal?" */}
-      <div className="bg-red-50 p-6 rounded-2xl border border-red-200 shadow-sm space-y-4">
-        <div className="flex items-center gap-3 border-b border-red-200 pb-3">
-          <div className="w-9 h-9 rounded-xl bg-red-600 text-white flex items-center justify-center shadow-sm">
-            <AlertCircle className="w-5 h-5" />
+      {/* Critical Narrative Box: "¿Qué Salió Mal?" & Prevención de Falsos Positivos */}
+      <div className={`p-6 rounded-2xl border shadow-sm space-y-4 ${
+        whatWentWrong.alert_authenticity === 'POSSIBLE_TECHNICAL_FALSE_POSITIVE'
+          ? 'bg-amber-50 border-amber-300'
+          : 'bg-red-50 border-red-200'
+      }`}>
+        <div className="flex items-center justify-between border-b pb-3 border-slate-200/60">
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-sm text-white ${
+              whatWentWrong.alert_authenticity === 'POSSIBLE_TECHNICAL_FALSE_POSITIVE' ? 'bg-amber-600' : 'bg-red-600'
+            }`}>
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900">Resumen Clínico Específico ({currentPatientId}): ¿Qué Salió Mal?</h3>
+              <p className="text-xs text-slate-600">Diagnóstico determinista y auditoría de artefactos en PostgreSQL risa_db.</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-base font-extrabold text-red-900">Resumen Clínico Específico ({currentPatientId}): ¿Qué Salió Mal?</h3>
-            <p className="text-xs text-red-700">Diagnóstico determinista derivado del Common Data Model (CDM).</p>
-          </div>
+
+          <span className={`px-3 py-1 rounded-full text-xs font-extrabold border ${
+            whatWentWrong.alert_authenticity === 'POSSIBLE_TECHNICAL_FALSE_POSITIVE'
+              ? 'bg-amber-100 text-amber-900 border-amber-300'
+              : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+          }`}>
+            {whatWentWrong.alert_authenticity === 'POSSIBLE_TECHNICAL_FALSE_POSITIVE'
+              ? '⚠️ RIESGO DE FALSO POSITIVO TÉCNICO'
+              : '✓ ALERTA CLÍNICA AUTÉNTICA CONFIRMADA'}
+          </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div className="bg-white p-4 rounded-xl border border-red-200 space-y-1 shadow-sm">
+          <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-1 shadow-sm">
             <span className="font-bold text-red-900 flex items-center gap-1.5">
-              <Activity className="w-4 h-4 text-red-600" /> Hallazgo Principal (Disparador Primario)
+              <Activity className="w-4 h-4 text-red-600" /> Hallazgo Principal (Cifra y Tiempo Exacto)
             </span>
-            <p className="text-slate-800 leading-relaxed">{whatWentWrong.primary_symptom}</p>
+            <p className="text-slate-800 leading-relaxed font-mono text-[11px]">{whatWentWrong.primary_symptom}</p>
           </div>
 
-          <div className="bg-white p-4 rounded-xl border border-red-200 space-y-1 shadow-sm">
+          <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-1 shadow-sm">
             <span className="font-bold text-red-900 flex items-center gap-1.5">
-              <Info className="w-4 h-4 text-orange-600" /> Hallazgo de Soporte / Explicación
+              <Info className="w-4 h-4 text-orange-600" /> Factores de Soporte / Explicación
             </span>
-            <p className="text-slate-800 leading-relaxed">{whatWentWrong.supporting_symptom}</p>
+            <p className="text-slate-800 leading-relaxed font-mono text-[11px]">{whatWentWrong.supporting_symptom}</p>
           </div>
 
-          <div className="bg-white p-4 rounded-xl border border-red-200 space-y-1 shadow-sm">
+          <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-1 shadow-sm">
             <span className="font-bold text-red-900 flex items-center gap-1.5">
               <Moon className="w-4 h-4 text-indigo-600" /> Contexto Operativo
             </span>
-            <p className="text-slate-800 leading-relaxed">{whatWentWrong.context_state}</p>
+            <p className="text-slate-800 leading-relaxed text-[11px]">{whatWentWrong.context_state}</p>
           </div>
 
-          <div className="bg-white p-4 rounded-xl border border-red-200 space-y-1 shadow-sm">
+          <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-1 shadow-sm">
             <span className="font-bold text-red-900 flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Auditoría de Red y Calidad
+              <ShieldCheck className="w-4 h-4 text-emerald-600" /> Auditoría de Calidad y Falsos Positivos
             </span>
-            <p className="text-slate-800 leading-relaxed">{whatWentWrong.data_quality}</p>
+            <p className="text-slate-800 leading-relaxed text-[11px] font-semibold">{whatWentWrong.data_quality}</p>
           </div>
         </div>
       </div>
@@ -589,9 +607,9 @@ function IncidenceDetailView({ signalId, patientId, onBack, onOpenPatientHistory
             <thead className="bg-slate-100 text-slate-700 font-semibold uppercase border-b border-slate-200 sticky top-0">
               <tr>
                 <th className="p-3">Rol</th>
-                <th className="p-3">Archivo Fuente</th>
-                <th className="p-3">Record ID</th>
                 <th className="p-3">Variable</th>
+                <th className="p-3">Cifra y Unidad Exacta</th>
+                <th className="p-3">Record ID / Archivo</th>
                 <th className="p-3">Timestamp Ocurrencia vs Ingesta</th>
               </tr>
             </thead>
@@ -608,9 +626,13 @@ function IncidenceDetailView({ signalId, patientId, onBack, onOpenPatientHistory
                         {ev.evidence_role}
                       </span>
                     </td>
-                    <td className="p-3 text-slate-600">{ev.source_file}</td>
-                    <td className="p-3 font-bold text-slate-900">{ev.record_id}</td>
-                    <td className="p-3 text-blue-600 font-semibold">{ev.variable_code}</td>
+                    <td className="p-3 text-blue-600 font-bold">{ev.variable_code}</td>
+                    <td className="p-3 font-mono font-bold text-slate-900">
+                      {ev.value_numeric !== null && ev.value_numeric !== undefined
+                        ? `${ev.value_numeric} ${ev.original_unit || ''}`
+                        : <span className="text-slate-400 font-normal">N/A (Categoría)</span>}
+                    </td>
+                    <td className="p-3 text-slate-600">{ev.record_id} <span className="text-[10px] text-slate-400">({ev.source_file})</span></td>
                     <td className="p-3 text-[11px] text-slate-600">
                       Ocurrencia: {ev.event_datetime} <br/>
                       <span className="text-emerald-700 font-bold">✓ Disponible: {ev.available_datetime}</span>
@@ -629,6 +651,7 @@ function IncidenceDetailView({ signalId, patientId, onBack, onOpenPatientHistory
           <CheckCircle2 className="w-3.5 h-3.5" /> Verificación Anti-Fuga Temporal: T_available ≤ T_decision cumplida al 100%.
         </p>
       </div>
+
     </div>
   );
 }
