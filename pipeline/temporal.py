@@ -128,7 +128,6 @@ class TemporalProcessor:
         if not dt_str or str(dt_str).strip() in ("", "None", "null"):
             return None
         dt_clean = str(dt_str).strip()
-        # Formatos comunes en RISA: '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d', ISO-8601
         for fmt in (
             "%Y-%m-%d %H:%M:%S.%f",
             "%Y-%m-%d %H:%M:%S",

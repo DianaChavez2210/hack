@@ -71,6 +71,60 @@ class RISACSVAdapter(BaseHospitalAdapter):
 
         return raw_records
 
+    def extract_raw_chunks(
+        self, source_config: Dict[str, Any], chunk_size: int = 50000
+    ):
+        """
+        Generador que lee un archivo CSV en streaming y emite lotes (chunks) de RawRecords
+        de tamaño chunk_size para evitar el agotamiento de memoria en archivos masivos.
+        """
+        file_path = source_config.get("file_path")
+        if not file_path or not os.path.exists(file_path):
+            raise FileNotFoundError(f"Archivo no encontrado en ruta: {file_path}")
+
+        max_rows = source_config.get("max_rows", None)
+        source_file_name = Path(file_path).name
+
+        with open(file_path, "r", encoding="utf-8-sig", errors="replace") as f:
+            reader = csv.DictReader(f)
+            count = 0
+            chunk: List[RawRecord] = []
+
+            for raw_row in reader:
+                row = {k.lstrip("\ufeff").strip(): v for k, v in raw_row.items() if k is not None}
+
+                record_id = (
+                    row.get("observation_id")
+                    or row.get("wearable_observation_id")
+                    or row.get("device_observation_id")
+                    or row.get("lab_result_id")
+                    or row.get("administration_id")
+                    or row.get("condition_id")
+                    or row.get("context_id")
+                    or row.get("event_id")
+                    or row.get("patient_id")
+                    or f"{source_file_name}_{count}"
+                )
+
+                raw_rec = RawRecord(
+                    record_id=str(record_id),
+                    source_file=source_file_name,
+                    facility_id=row.get("facility_id", self.hospital_id),
+                    raw_payload=row
+                )
+                chunk.append(raw_rec)
+                count += 1
+
+                if len(chunk) >= chunk_size:
+                    yield chunk
+                    chunk = []
+
+                if max_rows and count >= max_rows:
+                    break
+
+            if chunk:
+                yield chunk
+
     def map_to_cdm(self, raw_records: List[RawRecord]) -> List[CDMRecord]:
         """
         Transforma los RawRecords a CDMRecords estandarizados según el esquema de la tabla de origen,
