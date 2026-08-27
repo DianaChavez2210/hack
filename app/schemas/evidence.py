@@ -26,5 +26,8 @@ class SignalEvidenceResponse(BaseModel):
     decision_datetime: str
     risk_score: float
     priority_level: str
+    onset_datetime: Optional[str] = None
+    explanation: Optional[str] = None
+    what_went_wrong: Dict[str, str]
     shap_contributions: List[Dict[str, Any]]
     evidences: List[EvidenceRecordSchema]
