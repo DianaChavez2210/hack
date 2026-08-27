@@ -1,1 +1,98 @@
+# ==========================================
+# Git Ignore — HealthSignal LATAM (RISA V1.0)
+# ==========================================
+
+# --- Entornos Virtuales y Python ---
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# --- Bytecode y Cache de Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- Datasets Masivos y Archivos de Origen ---
 01_RISA_DATA_V1_0/
+*.zip
+*.tar.gz
+*.tar
+*.rar
+
+# --- Datos Generados en Ejecución (data/) ---
+data/raw/*
+data/clean/*
+data/features/*
+!data/raw/nada.txt
+!data/raw/.gitkeep
+!data/clean/nada.txt
+!data/clean/.gitkeep
+!data/features/nada.txt
+!data/features/.gitkeep
+!data/catalogs/nada.txt
+!data/catalogs/.gitkeep
+
+# --- Resultados Generados (results/) ---
+results/signals.csv
+results/evidence.csv
+!results/nada.txt
+!results/.gitkeep
+
+# --- Modelos Serializados y Checkpoints (model/artifacts/) ---
+model/artifacts/*.pkl
+model/artifacts/*.joblib
+model/artifacts/*.onnx
+model/artifacts/*.pt
+model/artifacts/*.h5
+model/artifacts/*.bin
+!model/artifacts/nada.txt
+!model/artifacts/.gitkeep
+
+# --- Pruebas y Cobertura (Testing) ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# --- IDEs y Editores de Código ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# --- Variables de Entorno y Secretos ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
