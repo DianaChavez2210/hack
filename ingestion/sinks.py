@@ -20,15 +20,28 @@ class RawStorageSink:
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_records(self, records: List[RawRecord], partition_name: str = "raw_batch") -> str:
+class RawStorageSink:
+    """
+    Persiste copias inmutables de los registros crudos en la capa data/raw/.
+    Conserva metadatos de auditoría y trazabilidad del payload original.
+    """
+    def __init__(self, base_dir: str = "data/raw"):
+        self.base_dir = Path(base_dir)
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    def save_records(
+        self, records: List[RawRecord], partition_name: str = "raw_batch", append: bool = False
+    ) -> str:
         """
-        Guarda una lista de RawRecords en formato JSON Lines inmutable.
+        Guarda una lista de RawRecords en formato JSON Lines.
+        Si append=False (por defecto para el primer bloque), sobrescribe el archivo previo.
         """
         if not records:
             return ""
 
         file_path = self.base_dir / f"{partition_name}.jsonl"
-        with open(file_path, "a", encoding="utf-8") as f:
+        mode = "a" if append and file_path.exists() else "w"
+        with open(file_path, mode, encoding="utf-8") as f:
             for rec in records:
                 f.write(json.dumps(rec.to_dict(), ensure_ascii=False) + "\n")
         
@@ -49,28 +62,33 @@ class CleanStorageSink:
         self.jsonl_dir.mkdir(parents=True, exist_ok=True)
         self.csv_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_records(self, records: List[CDMRecord], dataset_name: str = "clean_observations") -> str:
+    def save_records(
+        self, records: List[CDMRecord], dataset_name: str = "clean_observations", append: bool = False
+    ) -> str:
         """
         Guarda una lista de CDMRecords en subcarpetas separadas JSONL y CSV.
+        Si append=False (por defecto para el primer bloque), reinicia los archivos de destino.
         """
         if not records:
             return ""
 
         # 1. Guardar en carpeta jsonl/
         jsonl_path = self.jsonl_dir / f"{dataset_name}.jsonl"
-        with open(jsonl_path, "a", encoding="utf-8") as f:
+        jsonl_mode = "a" if append and jsonl_path.exists() else "w"
+        with open(jsonl_path, jsonl_mode, encoding="utf-8") as f:
             for rec in records:
                 f.write(json.dumps(rec.to_dict(), ensure_ascii=False) + "\n")
 
         # 2. Guardar en carpeta csv/
         csv_path = self.csv_dir / f"{dataset_name}.csv"
-        file_exists = csv_path.exists()
+        file_exists = csv_path.exists() and append
 
         # Determinar dinámica de cabeceras basada en los registros a exportar
         sample_dict = records[0].to_dict()
         fields = list(sample_dict.keys())
 
-        with open(csv_path, "a", encoding="utf-8", newline="") as f:
+        csv_mode = "a" if file_exists else "w"
+        with open(csv_path, csv_mode, encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
             if not file_exists:
                 writer.writeheader()
@@ -89,7 +107,9 @@ class AuditStorageSink:
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_audit_entries(self, entries: List[Any], log_name: str = "ingestion_processing") -> str:
+    def save_audit_entries(
+        self, entries: List[Any], log_name: str = "ingestion_processing", append: bool = True
+    ) -> str:
         """
         Guarda las entradas de auditoría e incidencias en un archivo de log (.log).
         """
@@ -97,8 +117,9 @@ class AuditStorageSink:
             return ""
 
         log_path = self.base_dir / f"{log_name}.log"
+        log_mode = "a" if append and log_path.exists() else "w"
 
-        with open(log_path, "a", encoding="utf-8") as f:
+        with open(log_path, log_mode, encoding="utf-8") as f:
             for entry in entries:
                 data = entry.to_dict() if hasattr(entry, "to_dict") else dict(entry)
                 timestamp = data.get("timestamp", "")
