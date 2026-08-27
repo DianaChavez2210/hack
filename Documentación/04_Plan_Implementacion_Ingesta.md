@@ -39,7 +39,7 @@ flowchart TD
     subgraph Ingesta["Módulo de Ingesta (ingestion/)"]
         Factory["HospitalIngestionFactory"]
         CSV_Ad["CSVAdapter / RISAAdapter"]
-        RawSink["RawStorageSink -> Ingesta_de_datos/data/raw/"]
+        RawSink["RawStorageSink -> data/raw/"]
         Mapper["Mapper -> CDMRecord"]
         Orchestrator["IngestionOrchestrator"]
     end
@@ -53,7 +53,7 @@ flowchart TD
     end
 
     subgraph Destino["Capa CLEAN (Persistencia)"]
-        CleanSink["CleanStorageSink -> Ingesta_de_datos/data/clean/"]
+        CleanSink["CleanStorageSink -> data/clean/"]
     end
 
     CSV_Files --> CSV_Ad
@@ -74,11 +74,14 @@ flowchart TD
 ## 3. Distribución de Archivos y Responsabilidades
 
 ```text
-Ingesta_de_datos/
-├── models/                               # Common Data Model (CDM) y Schemas
-│   ├── raw_record.py                     # Modelo para payloads inmutables de origen
-│   └── cdm.py                            # Modelo canónico unificado CDMRecord
-├── ingestion/                            # Adaptadores, Fábrica y Sinks
+├── Documentación/                        # Guías técnicas y arquitectura oficial
+│   ├── 01_Guia_Tecnica_Oficial_Participantes_HealthSignal_LATAM.md
+│   ├── 02_Arquitectura_Sistema_Ingesta.md
+│   ├── 03_Arquitectura_Base_de_Datos_RISA.md
+│   └── 04_Plan_Implementacion_Ingesta.md
+├── ingestion/                            # Adaptadores, Fábrica, Modelos y Sinks
+│   ├── __init__.py
+│   ├── models.py                         # Modelos canónicos RawRecord y CDMRecord
 │   ├── base_adapter.py                   # Interfaz abstracta (extract_raw + map_to_cdm)
 │   ├── factory.py                        # HospitalIngestionFactory (Registro dinámico)
 │   ├── csv_adapter.py                    # RISACSVAdapter (Lector para los 17 CSVs)
@@ -86,6 +89,7 @@ Ingesta_de_datos/
 │   ├── sinks.py                          # RawStorageSink y CleanStorageSink
 │   └── orchestrator.py                   # IngestionOrchestrator
 ├── pipeline/                             # Pipeline Común de Limpieza y Calidad
+│   ├── __init__.py
 │   ├── validation.py                     # SchemaValidator (Validación de contratos e IDs)
 │   ├── cleaning.py                       # DataCleaner (Deduplicación y control de missingness)
 │   ├── normalization.py                  # UnitNormalizer y PlausibilityChecker
@@ -94,7 +98,9 @@ Ingesta_de_datos/
 │   └── leakage_guard.py                  # LeakageGuard (Anti-temporal leakage)
 ├── data/
 │   ├── raw/                              # Copias inmutables de origen con metadatos
-│   └── clean/                            # Tablas procesadas en formato CDM (Parquet/SQLite)
+│   ├── clean/                            # Tablas procesadas en formato CDM (Parquet/SQLite)
+│   ├── features/                         # Matrices de características derivadas
+│   └── catalogs/                         # Catálogos oficiales de unidades y variables
 ├── tests/
 │   ├── test_ingestion.py                 # Pruebas de adaptadores y guardado RAW
 │   ├── test_cleaning_and_units.py        # Pruebas de deduplicación, nulos y unidades
