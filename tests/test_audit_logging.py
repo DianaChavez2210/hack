@@ -53,11 +53,11 @@ def test_audit_logging_full_pipeline(tmp_path):
     checker.check([rec_out], audit_log=audit_log)
     assert any(e.stage == "PLAUSIBILITY_CHECK" and "fuera de rango" in e.reason for e in audit_log)
 
-    # 5. Persistencia del log de auditoría
-    audit_sink = AuditStorageSink(base_dir=str(tmp_path / "audit"))
-    csv_path = audit_sink.save_audit_entries(audit_log, log_name="test_audit_log")
-    assert Path(csv_path).exists()
-    assert Path(str(tmp_path / "audit" / "test_audit_log.jsonl")).exists()
+    # 5. Persistencia del log de auditoría (.log)
+    audit_sink = AuditStorageSink(base_dir=str(tmp_path / "logs"))
+    log_path = audit_sink.save_audit_entries(audit_log, log_name="test_audit_log")
+    assert Path(log_path).exists()
+    assert log_path.endswith(".log")
 
 
 if __name__ == "__main__":

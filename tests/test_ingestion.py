@@ -61,6 +61,8 @@ def test_storage_sinks_temporary(tmp_path):
     )
     clean_path = clean_sink.save_records([cdm_rec], dataset_name="test_clean")
     assert Path(clean_path).exists()
+    assert (tmp_path / "clean" / "jsonl" / "test_clean.jsonl").exists()
+    assert (tmp_path / "clean" / "csv" / "test_clean.csv").exists()
 
 
 if __name__ == "__main__":

@@ -73,144 +73,195 @@ class RISACSVAdapter(BaseHospitalAdapter):
 
     def map_to_cdm(self, raw_records: List[RawRecord]) -> List[CDMRecord]:
         """
-        Transforma los RawRecords a CDMRecords estandarizados según el esquema de la tabla de origen.
+        Transforma los RawRecords a CDMRecords estandarizados según el esquema de la tabla de origen,
+        preservando el esquema propio de la cabecera original en header_fields.
         """
         cdm_records: List[CDMRecord] = []
 
         for raw in raw_records:
-            payload = raw.raw_payload
+            raw_payload = raw.raw_payload
             source_file = raw.source_file.lower()
 
-            # 1. Signos Vitales (vital_signs.csv)
-            if "vital_signs" in source_file:
-                val_num = self._safe_float(payload.get("value"))
+            # Normalización de valores vacíos/nulos en el payload de la cabecera
+            cleaned_payload = {}
+            null_fields = []
+            for k, v in raw_payload.items():
+                if v is None or str(v).strip() in ("", "None", "null", "NaN", "nan"):
+                    cleaned_payload[k] = None
+                    null_fields.append(k)
+                else:
+                    cleaned_payload[k] = v.strip() if isinstance(v, str) else v
+
+            # 1. Tabla de Dispositivos (devices.csv)
+            if "devices" in source_file:
+                dev_id = cleaned_payload.get("device_id") or raw.record_id
+                rel_class = cleaned_payload.get("reliability_class", "")
+                active_val = cleaned_payload.get("active", "True")
+                
+                q_flag = "OK"
+                if rel_class == "R3_VARIABLE":
+                    q_flag = "VARIABLE_RELIABILITY"
+                elif str(active_val).lower() in ("false", "0"):
+                    q_flag = "INACTIVE_DEVICE"
+
                 cdm_records.append(CDMRecord(
-                    record_id=raw.record_id,
-                    patient_id=payload.get("patient_id", ""),
-                    encounter_id=payload.get("encounter_id"),
-                    facility_id=payload.get("facility_id", raw.facility_id),
-                    device_id=payload.get("device_id"),
+                    record_id=str(dev_id),
+                    patient_id=cleaned_payload.get("assigned_patient_id") or "",
+                    facility_id=cleaned_payload.get("facility_id") or raw.facility_id,
+                    device_id=str(dev_id),
                     source_file=raw.source_file,
-                    source_system=payload.get("source_system", "MONITOR_GATEWAY"),
-                    variable_code=payload.get("variable_code", ""),
-                    value_numeric=val_num,
-                    original_unit=payload.get("unit"),
-                    event_datetime=payload.get("timestamp"),
-                    available_datetime=payload.get("timestamp"), # En gateway monitor, near real time
-                    quality_flag=payload.get("quality_flag", "OK"),
-                    is_observed=val_num is not None or bool(payload.get("value")),
-                    is_retransmission=(payload.get("source_system") == "MONITOR_RETRANSMIT")
+                    source_system=cleaned_payload.get("manufacturer_class", "DEVICE_GATEWAY"),
+                    variable_code=cleaned_payload.get("device_type", "DEVICE"),
+                    quality_flag=q_flag,
+                    is_observed=True,
+                    header_fields=cleaned_payload,
+                    null_fields=null_fields
                 ))
 
-            # 2. Wearables (wearable_observations.csv)
+            # 2. Signos Vitales (vital_signs.csv)
+            elif "vital_signs" in source_file:
+                val_num = self._safe_float(cleaned_payload.get("value"))
+                cdm_records.append(CDMRecord(
+                    record_id=raw.record_id,
+                    patient_id=cleaned_payload.get("patient_id", ""),
+                    encounter_id=cleaned_payload.get("encounter_id"),
+                    facility_id=cleaned_payload.get("facility_id", raw.facility_id),
+                    device_id=cleaned_payload.get("device_id"),
+                    source_file=raw.source_file,
+                    source_system=cleaned_payload.get("source_system", "MONITOR_GATEWAY"),
+                    variable_code=cleaned_payload.get("variable_code", ""),
+                    value_numeric=val_num,
+                    original_unit=cleaned_payload.get("unit"),
+                    event_datetime=cleaned_payload.get("timestamp"),
+                    available_datetime=cleaned_payload.get("timestamp"),
+                    quality_flag=cleaned_payload.get("quality_flag", "OK"),
+                    is_observed=val_num is not None or bool(cleaned_payload.get("value")),
+                    is_retransmission=(cleaned_payload.get("source_system") == "MONITOR_RETRANSMIT"),
+                    header_fields=cleaned_payload,
+                    null_fields=null_fields
+                ))
+
+            # 3. Wearables (wearable_observations.csv)
             elif "wearable" in source_file:
-                raw_val = payload.get("value")
+                raw_val = cleaned_payload.get("value")
                 val_num = self._safe_float(raw_val)
                 val_txt = str(raw_val) if val_num is None and raw_val is not None else None
                 cdm_records.append(CDMRecord(
                     record_id=raw.record_id,
-                    patient_id=payload.get("patient_id", ""),
-                    device_id=payload.get("device_id"),
+                    patient_id=cleaned_payload.get("patient_id", ""),
+                    device_id=cleaned_payload.get("device_id"),
                     source_file=raw.source_file,
                     source_system="WEARABLE_GATEWAY",
-                    variable_code=payload.get("variable_code", ""),
+                    variable_code=cleaned_payload.get("variable_code", ""),
                     value_numeric=val_num,
                     value_text=val_txt,
-                    original_unit=payload.get("unit"),
-                    event_datetime=payload.get("timestamp"),
-                    available_datetime=payload.get("sync_datetime"), # Sync diferido (T_available)
-                    quality_flag=payload.get("measurement_quality", "OK"),
-                    is_observed=val_num is not None or val_txt is not None
+                    original_unit=cleaned_payload.get("unit"),
+                    event_datetime=cleaned_payload.get("timestamp"),
+                    available_datetime=cleaned_payload.get("sync_datetime"),
+                    quality_flag=cleaned_payload.get("measurement_quality", "OK"),
+                    is_observed=val_num is not None or val_txt is not None,
+                    header_fields=cleaned_payload,
+                    null_fields=null_fields
                 ))
 
-            # 3. Laboratorio (laboratory_results.csv)
+            # 4. Laboratorio (laboratory_results.csv)
             elif "laboratory" in source_file:
-                val_num = self._safe_float(payload.get("result_value"))
+                val_num = self._safe_float(cleaned_payload.get("result_value"))
                 cdm_records.append(CDMRecord(
                     record_id=raw.record_id,
-                    patient_id=payload.get("patient_id", ""),
-                    encounter_id=payload.get("encounter_id"),
-                    facility_id=payload.get("facility_id"),
+                    patient_id=cleaned_payload.get("patient_id", ""),
+                    encounter_id=cleaned_payload.get("encounter_id"),
+                    facility_id=cleaned_payload.get("facility_id"),
                     source_file=raw.source_file,
-                    source_system=payload.get("source_system", "LAB_SYS"),
-                    variable_code=payload.get("test_code", ""),
+                    source_system=cleaned_payload.get("source_system", "LAB_SYS"),
+                    variable_code=cleaned_payload.get("test_code", ""),
                     value_numeric=val_num,
-                    value_text=payload.get("test_name"),
-                    original_unit=payload.get("unit"),
-                    event_datetime=payload.get("sample_datetime"), # Momento toma de muestra
-                    available_datetime=payload.get("result_datetime"), # Momento resultado disponible
-                    quality_flag=payload.get("quality_flag", "OK"),
-                    is_observed=val_num is not None
+                    value_text=cleaned_payload.get("test_name"),
+                    original_unit=cleaned_payload.get("unit"),
+                    event_datetime=cleaned_payload.get("sample_datetime"),
+                    available_datetime=cleaned_payload.get("result_datetime"),
+                    quality_flag=cleaned_payload.get("quality_flag", "OK"),
+                    is_observed=val_num is not None,
+                    header_fields=cleaned_payload,
+                    null_fields=null_fields
                 ))
 
-            # 4. Observaciones de Dispositivo / Calidad (device_observations.csv)
+            # 5. Observaciones de Dispositivo / Calidad (device_observations.csv)
             elif "device_observations" in source_file:
-                val_num = self._safe_float(payload.get("value"))
-                sig_qual = self._safe_float(payload.get("signal_quality"))
+                val_num = self._safe_float(cleaned_payload.get("value"))
+                sig_qual = self._safe_float(cleaned_payload.get("signal_quality"))
                 cdm_records.append(CDMRecord(
                     record_id=raw.record_id,
-                    patient_id=payload.get("patient_id", ""),
-                    encounter_id=payload.get("encounter_id"),
-                    device_id=payload.get("device_id"),
+                    patient_id=cleaned_payload.get("patient_id", ""),
+                    encounter_id=cleaned_payload.get("encounter_id"),
+                    device_id=cleaned_payload.get("device_id"),
                     source_file=raw.source_file,
-                    source_system=payload.get("source_system", "MONITOR_GATEWAY"),
-                    variable_code=payload.get("variable_code", "SIGNAL_QUALITY_INDEX"),
+                    source_system=cleaned_payload.get("source_system", "MONITOR_GATEWAY"),
+                    variable_code=cleaned_payload.get("variable_code", "SIGNAL_QUALITY_INDEX"),
                     value_numeric=val_num,
-                    original_unit=payload.get("unit"),
-                    event_datetime=payload.get("timestamp"),
-                    available_datetime=payload.get("timestamp"),
+                    original_unit=cleaned_payload.get("unit"),
+                    event_datetime=cleaned_payload.get("timestamp"),
+                    available_datetime=cleaned_payload.get("timestamp"),
                     signal_quality=sig_qual or val_num,
-                    is_observed=val_num is not None
+                    is_observed=val_num is not None,
+                    header_fields=cleaned_payload,
+                    null_fields=null_fields
                 ))
 
-            # 5. Medicaciones (medication_administrations.csv)
+            # 6. Medicaciones (medication_administrations.csv)
             elif "medication_administrations" in source_file:
-                val_num = self._safe_float(payload.get("dose_value"))
+                val_num = self._safe_float(cleaned_payload.get("dose_value"))
                 cdm_records.append(CDMRecord(
                     record_id=raw.record_id,
-                    patient_id=payload.get("patient_id", ""),
-                    encounter_id=payload.get("encounter_id"),
+                    patient_id=cleaned_payload.get("patient_id", ""),
+                    encounter_id=cleaned_payload.get("encounter_id"),
                     source_file=raw.source_file,
-                    source_system=payload.get("source_system", "EHR_MED"),
-                    variable_code=payload.get("medication_id", ""),
+                    source_system=cleaned_payload.get("source_system", "EHR_MED"),
+                    variable_code=cleaned_payload.get("medication_id", ""),
                     value_numeric=val_num,
-                    original_unit=payload.get("dose_unit"),
-                    event_datetime=payload.get("start_datetime"),
-                    available_datetime=payload.get("end_datetime") or payload.get("start_datetime"),
+                    original_unit=cleaned_payload.get("dose_unit"),
+                    event_datetime=cleaned_payload.get("start_datetime"),
+                    available_datetime=cleaned_payload.get("end_datetime") or cleaned_payload.get("start_datetime"),
                     quality_flag="OK",
-                    is_observed=val_num is not None
+                    is_observed=val_num is not None,
+                    header_fields=cleaned_payload,
+                    null_fields=null_fields
                 ))
 
-            # 6. Diagnósticos y Antecedentes (conditions.csv)
+            # 7. Diagnósticos y Antecedentes (conditions.csv)
             elif "conditions" in source_file:
                 cdm_records.append(CDMRecord(
                     record_id=raw.record_id,
-                    patient_id=payload.get("patient_id", ""),
+                    patient_id=cleaned_payload.get("patient_id", ""),
                     source_file=raw.source_file,
-                    source_system=payload.get("source_system", "EHR_CORE"),
-                    variable_code=payload.get("condition_category", ""),
-                    value_text=payload.get("status", "ACTIVE"),
-                    event_datetime=payload.get("onset_date"),
-                    available_datetime=payload.get("recorded_datetime") or payload.get("onset_date"),
+                    source_system=cleaned_payload.get("source_system", "EHR_CORE"),
+                    variable_code=cleaned_payload.get("condition_category", ""),
+                    value_text=cleaned_payload.get("status", "ACTIVE"),
+                    event_datetime=cleaned_payload.get("onset_date"),
+                    available_datetime=cleaned_payload.get("recorded_datetime") or cleaned_payload.get("onset_date"),
                     quality_flag="OK",
-                    is_observed=True
+                    is_observed=True,
+                    header_fields=cleaned_payload,
+                    null_fields=null_fields
                 ))
 
-            # 7. Fallback para otras tablas (pacientes, encuentros, contexto)
+            # 8. Fallback Dinámico para Maestros y otras tablas (pacientes, instalaciones, encuentros, contexto)
             else:
                 cdm_records.append(CDMRecord(
                     record_id=raw.record_id,
-                    patient_id=payload.get("patient_id", ""),
-                    encounter_id=payload.get("encounter_id"),
-                    facility_id=payload.get("facility_id"),
-                    device_id=payload.get("device_id"),
+                    patient_id=cleaned_payload.get("patient_id") or cleaned_payload.get("assigned_patient_id") or "",
+                    encounter_id=cleaned_payload.get("encounter_id"),
+                    facility_id=cleaned_payload.get("facility_id"),
+                    device_id=cleaned_payload.get("device_id"),
                     source_file=raw.source_file,
-                    source_system=payload.get("source_system", "GENERIC_CSV"),
-                    variable_code=payload.get("variable_code") or payload.get("context_type") or "METADATA",
-                    value_text=str(payload),
-                    event_datetime=payload.get("timestamp") or payload.get("start_datetime"),
-                    available_datetime=payload.get("sync_datetime") or payload.get("end_datetime") or payload.get("start_datetime"),
-                    is_observed=True
+                    source_system=cleaned_payload.get("source_system", "GENERIC_CSV"),
+                    variable_code=cleaned_payload.get("variable_code") or cleaned_payload.get("context_type") or "METADATA",
+                    value_text=str(cleaned_payload),
+                    event_datetime=cleaned_payload.get("timestamp") or cleaned_payload.get("start_datetime"),
+                    available_datetime=cleaned_payload.get("sync_datetime") or cleaned_payload.get("end_datetime") or cleaned_payload.get("start_datetime"),
+                    is_observed=True,
+                    header_fields=cleaned_payload,
+                    null_fields=null_fields
                 ))
 
         return cdm_records

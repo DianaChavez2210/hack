@@ -63,7 +63,9 @@ class CDMRecord:
     quality_flag: str = "OK"                   # OK, NOISE, ARTIFACT, etc.
     signal_quality: Optional[float] = None     # Calidad de señal (0.0 a 1.0)
     is_retransmission: bool = False            # True si proviene de MONITOR_RETRANSMIT
-    plausibility_status: str = "VALID"         # VALID, OUT_OF_RANGE, SUSPICIOUS
+    plausibility_status: str = "VALID"         # VALID, OUT_OF_RANGE, SUSPICIOUS, UNRELIABLE_DEVICE, etc.
+    header_fields: Dict[str, Any] = field(default_factory=dict) # Mapeo completo de la cabecera original
+    null_fields: list = field(default_factory=list) # Lista de campos que contienen valores nulos/vacíos
     context_info: Dict[str, Any] = field(default_factory=dict) # Metadata adicional (sueño, conectividad)
     audit_trail: list = field(default_factory=list) # Registro cronológico de transformaciones del registro
 
@@ -78,7 +80,21 @@ class CDMRecord:
         })
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        base = asdict(self)
+        if self.header_fields:
+            # Preservar la estructura exacta de la cabecera original como claves principales,
+            # complementada con los indicadores de calidad estandarizados.
+            merged = dict(self.header_fields)
+            merged.update({
+                "is_observed": self.is_observed,
+                "quality_flag": self.quality_flag,
+                "plausibility_status": self.plausibility_status,
+                "signal_quality": self.signal_quality,
+                "is_retransmission": self.is_retransmission,
+                "null_fields": self.null_fields
+            })
+            return merged
+        return base
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "CDMRecord":

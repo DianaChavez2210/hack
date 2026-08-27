@@ -84,16 +84,19 @@ class IngestionOrchestrator:
         # 4.6 Contextualización
         final_records = self.contextualizer.contextualize(temporal_records, audit_log=audit_log)
 
-        # 5. Persistencia en Capa CLEAN
+        # 5. Persistencia en Capa CLEAN (Subcarpetas jsonl/ y csv/)
         clean_file_path = self.clean_sink.save_records(
             final_records,
             dataset_name=dataset_name
         )
 
-        # 6. Persistencia del Registro de Auditoría de Calidad
+        clean_jsonl_path = str(self.clean_sink.jsonl_dir / f"{dataset_name}.jsonl")
+        clean_csv_path = str(self.clean_sink.csv_dir / f"{dataset_name}.csv")
+
+        # 6. Persistencia de Registro de Calidad e Incidencias en Archivo .log
         audit_file_path = self.audit_sink.save_audit_entries(
             audit_log,
-            log_name=f"audit_{dataset_name}"
+            log_name="ingestion_processing"
         )
 
         # Resumen de decisiones tomadas
@@ -111,6 +114,8 @@ class IngestionOrchestrator:
             "audit_stages": stage_summary,
             "raw_path": raw_file_path,
             "clean_path": clean_file_path,
+            "clean_jsonl_path": clean_jsonl_path,
+            "clean_csv_path": clean_csv_path,
             "audit_path": audit_file_path,
             "status": "SUCCESS"
         }

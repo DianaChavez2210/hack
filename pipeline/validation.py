@@ -25,21 +25,20 @@ class SchemaValidator:
         invalid_records: List[CDMRecord] = []
 
         for rec in records:
-            # 1. Comprobación de campos esenciales
+            # Comprobación de integridad estructural según el esquema propio de la cabecera
             missing_fields = []
             if not rec.record_id or not str(rec.record_id).strip():
                 missing_fields.append("record_id")
-            if not rec.patient_id or not str(rec.patient_id).strip():
-                missing_fields.append("patient_id")
-            if not rec.variable_code or not str(rec.variable_code).strip():
-                missing_fields.append("variable_code")
-            if not rec.event_datetime and not rec.available_datetime:
-                missing_fields.append("timestamps(event/available)")
+
+            # Para registros sin header_fields explícito (compatibilidad previa), evaluar identificador
+            if not rec.header_fields:
+                if not rec.patient_id and not rec.device_id and not rec.facility_id:
+                    missing_fields.append("entity_identifier")
 
             if not missing_fields:
                 valid_records.append(rec)
             else:
-                reason = f"Esquema incompleto: faltan campos obligatorios [{', '.join(missing_fields)}]"
+                reason = f"Esquema incompleto para {rec.source_file}: faltan campos estructurales obligatorios [{', '.join(missing_fields)}]"
                 rec.plausibility_status = "INVALID_SCHEMA"
                 rec.add_audit_entry(
                     stage="SCHEMA_VALIDATION",
@@ -52,7 +51,7 @@ class SchemaValidator:
                         record_id=rec.record_id or "UNKNOWN",
                         patient_id=rec.patient_id or "UNKNOWN",
                         source_file=rec.source_file,
-                        variable_code=rec.variable_code or "UNKNOWN",
+                        variable_code=rec.variable_code or "METADATA",
                         stage="SCHEMA_VALIDATION",
                         action="DISCARDED" if self.reject_invalid else "FLAGGED",
                         reason=reason,

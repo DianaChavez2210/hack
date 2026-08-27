@@ -37,37 +37,38 @@ class RawStorageSink:
 
 class CleanStorageSink:
     """
-    Persiste registros procesados y validados del Common Data Model en data/clean/.
+    Persiste registros procesados y validados del Common Data Model en subcarpetas estructuradas:
+    - data/clean/jsonl/
+    - data/clean/csv/
     """
     def __init__(self, base_dir: str = "data/clean"):
         self.base_dir = Path(base_dir)
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.jsonl_dir = self.base_dir / "jsonl"
+        self.csv_dir = self.base_dir / "csv"
+
+        self.jsonl_dir.mkdir(parents=True, exist_ok=True)
+        self.csv_dir.mkdir(parents=True, exist_ok=True)
 
     def save_records(self, records: List[CDMRecord], dataset_name: str = "clean_observations") -> str:
         """
-        Guarda una lista de CDMRecords en formato JSON Lines y CSV estructurado.
+        Guarda una lista de CDMRecords en subcarpetas separadas JSONL y CSV.
         """
         if not records:
             return ""
 
-        # 1. Guardar en JSON Lines
-        jsonl_path = self.base_dir / f"{dataset_name}.jsonl"
+        # 1. Guardar en carpeta jsonl/
+        jsonl_path = self.jsonl_dir / f"{dataset_name}.jsonl"
         with open(jsonl_path, "a", encoding="utf-8") as f:
             for rec in records:
                 f.write(json.dumps(rec.to_dict(), ensure_ascii=False) + "\n")
 
-        # 2. Guardar en CSV para inspección rápida
-        csv_path = self.base_dir / f"{dataset_name}.csv"
+        # 2. Guardar en carpeta csv/
+        csv_path = self.csv_dir / f"{dataset_name}.csv"
         file_exists = csv_path.exists()
-        
-        fields = [
-            "record_id", "patient_id", "encounter_id", "facility_id", "device_id",
-            "source_file", "source_system", "variable_code", "value_numeric",
-            "value_text", "original_unit", "canonical_unit", "converted_value",
-            "event_datetime", "available_datetime", "latency_seconds",
-            "is_observed", "is_imputed", "imputation_method", "quality_flag",
-            "signal_quality", "is_retransmission", "plausibility_status"
-        ]
+
+        # Determinar dinámica de cabeceras basada en los registros a exportar
+        sample_dict = records[0].to_dict()
+        fields = list(sample_dict.keys())
 
         with open(csv_path, "a", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
@@ -81,42 +82,37 @@ class CleanStorageSink:
 
 class AuditStorageSink:
     """
-    Persiste el registro de auditoría de decisiones de calidad de datos
-    (motivos de eliminación, corrección, conversión o flags).
+    Persiste el registro de auditoría de decisiones de calidad de datos, errores e incidencias
+    en archivos de registro .log en data/logs/.
     """
-    def __init__(self, base_dir: str = "data/clean"):
+    def __init__(self, base_dir: str = "data/logs"):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_audit_entries(self, entries: List[Any], log_name: str = "ingestion_audit_log") -> str:
+    def save_audit_entries(self, entries: List[Any], log_name: str = "ingestion_processing") -> str:
         """
-        Guarda las entradas de auditoría en JSONL y CSV.
+        Guarda las entradas de auditoría e incidencias en un archivo de log (.log).
         """
         if not entries:
             return ""
 
-        # 1. JSON Lines
-        jsonl_path = self.base_dir / f"{log_name}.jsonl"
-        with open(jsonl_path, "a", encoding="utf-8") as f:
+        log_path = self.base_dir / f"{log_name}.log"
+
+        with open(log_path, "a", encoding="utf-8") as f:
             for entry in entries:
                 data = entry.to_dict() if hasattr(entry, "to_dict") else dict(entry)
-                f.write(json.dumps(data, ensure_ascii=False) + "\n")
+                timestamp = data.get("timestamp", "")
+                stage = data.get("stage", "PROCESSING")
+                action = data.get("action", "INFO")
+                rec_id = data.get("record_id", "GLOBAL")
+                src_file = data.get("source_file", "UNKNOWN")
+                reason = data.get("reason", "")
+                details = data.get("details", "")
+                
+                log_line = f"{timestamp} [{action}] [{stage}] file={src_file} rec_id={rec_id} - {reason}"
+                if details:
+                    log_line += f" | Details: {details}"
+                f.write(log_line + "\n")
 
-        # 2. CSV para auditoría manual de parámetros y reglas
-        csv_path = self.base_dir / f"{log_name}.csv"
-        file_exists = csv_path.exists()
-        fields = [
-            "timestamp", "record_id", "patient_id", "source_file", "variable_code",
-            "stage", "action", "reason", "original_value", "corrected_value", "details"
-        ]
-
-        with open(csv_path, "a", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
-            if not file_exists:
-                writer.writeheader()
-            for entry in entries:
-                data = entry.to_dict() if hasattr(entry, "to_dict") else dict(entry)
-                writer.writerow(data)
-
-        return str(csv_path)
+        return str(log_path)
 

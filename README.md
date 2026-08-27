@@ -72,8 +72,8 @@ pip install -r requirements.txt
 
 El punto de entrada principal es `run_pipeline.py`, el cual permite ejecutar la ingesta completa o selectiva de las tablas de RISA Data V1.0.
 
-### 3.1 Ejecución Básica (Muestra de Prueba)
-Procesa los primeros 500 registros de cada tabla:
+### 3.1 Ejecución Básica (Procesamiento Completo de Datos)
+Ejecuta la ingesta de **todos los registros** de todas las tablas del dataset RISA Data V1.0 sin truncamiento:
 
 ```bash
 python run_pipeline.py
@@ -82,14 +82,14 @@ python run_pipeline.py
 ### 3.2 Ejecución con Opciones Personalizadas
 
 ```bash
-# Procesar un número específico de filas por tabla (ej. 1000 filas)
+# Limitar a una muestra de filas por tabla (ej. 1000 filas para pruebas rápidas)
 python run_pipeline.py --max-rows 1000
 
-# Procesar una tabla específica (vitals, wearables, lab_results, conditions, medications)
-python run_pipeline.py --table vitals --max-rows 2000
+# Procesar una tabla específica (vitals, wearables, lab_results, conditions, medications, etc.)
+python run_pipeline.py --table vitals
 
 # Procesar desde una ruta de datos personalizada
-python run_pipeline.py --data-dir 01_RISA_DATA_V1_0 --max-rows 500
+python run_pipeline.py --data-dir 01_RISA_DATA_V1_0
 ```
 
 ### 3.3 Parámetros Disponibles en la CLI
@@ -97,7 +97,7 @@ python run_pipeline.py --data-dir 01_RISA_DATA_V1_0 --max-rows 500
 | Parámetro | Tipo | Por Defecto | Descripción |
 |---|---|:---:|---|
 | `--data-dir` | `str` | `01_RISA_DATA_V1_0` | Directorio raíz donde reside el dataset RISA |
-| `--max-rows` | `int` | `500` | Número máximo de filas a procesar por tabla |
+| `--max-rows` | `int` | `0` (Sin Límite) | Número máximo de filas por tabla (`0` = procesar **todos** los datos) |
 | `--table` | `str` | `all` | Filtro de tabla (`vitals`, `wearables`, `lab`, `conditions`, `medications`, `all`) |
 
 ---
