@@ -22,6 +22,16 @@ class Contextualizer:
         self.connectivity_events = connectivity_events or []
         self._parser = TemporalProcessor._parse_iso_or_custom
 
+    def set_context(
+        self,
+        patient_contexts: Optional[List[Dict[str, Any]]] = None,
+        connectivity_events: Optional[List[Dict[str, Any]]] = None
+    ):
+        if patient_contexts is not None:
+            self.patient_contexts = patient_contexts
+        if connectivity_events is not None:
+            self.connectivity_events = connectivity_events
+
     def contextualize(
         self, records: List[CDMRecord], audit_log: Optional[List[AuditEntry]] = None
     ) -> List[CDMRecord]:
@@ -39,10 +49,39 @@ class Contextualizer:
                     start_dt = self._parser(ctx.get("start_datetime"))
                     end_dt = self._parser(ctx.get("end_datetime"))
                     if start_dt and end_dt and start_dt <= rec_dt <= end_dt:
-                        rec.context_info["patient_state"] = ctx.get("context_value")
+                        state_val = ctx.get("context_value")
+                        rec.context_info["patient_state"] = state_val
                         rec.context_info["context_confidence"] = ctx.get("confidence")
 
-            # 2. Enriquecer con Eventos de Conectividad de Red
+                        # Regla CX-03: Correlación Fisiológica - Contexto (Sueño)
+                        if state_val == "SLEEP":
+                            val = rec.converted_value if rec.converted_value is not None else rec.value_numeric
+                            if val is not None:
+                                is_suspicious = False
+                                reason = ""
+                                if rec.variable_code in ("WEARABLE_HR", "HR") and val > 100.0:
+                                    is_suspicious = True
+                                    reason = f"Frecuencia cardíaca elevada ({val} bpm) durante estado SLEEP en paciente {rec.patient_id}"
+                                elif rec.variable_code == "STEPS" and val > 10.0:
+                                    is_suspicious = True
+                                    reason = f"Conteo de pasos ({val}) detectado durante estado SLEEP en paciente {rec.patient_id}"
+
+                                if is_suspicious:
+                                    rec.plausibility_status = "SUSPICIOUS_SLEEP_ACTIVITY"
+                                    rec.add_audit_entry(stage="PATIENT_CONTEXT", action="FLAGGED", reason=reason)
+                                    if audit_log is not None:
+                                        audit_log.append(AuditEntry(
+                                            record_id=rec.record_id,
+                                            patient_id=rec.patient_id,
+                                            source_file=rec.source_file,
+                                            variable_code=rec.variable_code,
+                                            stage="PATIENT_CONTEXT",
+                                            action="FLAGGED",
+                                            reason=reason,
+                                            details={"rule": "CX-03", "patient_state": state_val, "value": val}
+                                        ))
+
+            # 2. Enriquecer con Eventos de Conectividad de Red (Regla CX-01)
             for conn in self.connectivity_events:
                 if conn.get("patient_id") == rec.patient_id or (rec.device_id and conn.get("device_id") == rec.device_id):
                     start_dt = self._parser(conn.get("start_datetime"))
@@ -53,7 +92,7 @@ class Contextualizer:
                         rec.context_info["network_status"] = status
                         rec.context_info["packet_loss"] = loss
 
-                        if status in ("DISCONNECTED", "INTERMITTENT"):
+                        if status in ("DISCONNECTED", "INTERMITTENT") or (loss is not None and float(loss) > 0.20):
                             reason = f"Evento de red detectado ({status}, pérdida={loss}); se marca como NETWORK_INTERRUPTED para no confundir con deterioro clínico"
                             if rec.plausibility_status == "VALID":
                                 rec.plausibility_status = "NETWORK_INTERRUPTED"
@@ -67,7 +106,7 @@ class Contextualizer:
                                     stage="NETWORK_CONTEXT",
                                     action="FLAGGED",
                                     reason=reason,
-                                    details={"connectivity_status": status, "packet_loss": loss}
+                                    details={"rule": "CX-01", "connectivity_status": status, "packet_loss": loss}
                                 ))
 
         return records

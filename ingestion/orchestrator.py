@@ -14,6 +14,7 @@ from pipeline.cleaning import DataCleaner
 from pipeline.normalization import UnitNormalizer, PlausibilityChecker
 from pipeline.temporal import TemporalProcessor
 from pipeline.contextualizer import Contextualizer
+from pipeline.integrity import SystemIntegrityValidator
 
 
 class IngestionOrchestrator:
@@ -32,14 +33,37 @@ class IngestionOrchestrator:
         self.raw_sink = raw_sink or RawStorageSink()
         self.clean_sink = clean_sink or CleanStorageSink()
         self.audit_sink = audit_sink or AuditStorageSink()
-        
+
         # Inicializar etapas del pipeline común
         self.validator = SchemaValidator(reject_invalid=False)
         self.cleaner = DataCleaner(drop_duplicates=True)
         self.unit_normalizer = UnitNormalizer(catalog_path=units_catalog_path)
         self.plausibility_checker = PlausibilityChecker(catalog_path=variable_catalog_path)
+        self.integrity_validator = SystemIntegrityValidator()
         self.temporal_processor = TemporalProcessor()
         self.contextualizer = Contextualizer()
+
+    def set_master_context(
+        self,
+        patients_dict: Optional[Dict[str, Dict[str, Any]]] = None,
+        encounters_dict: Optional[Dict[str, Dict[str, Any]]] = None,
+        devices_dict: Optional[Dict[str, Dict[str, Any]]] = None,
+        patient_contexts: Optional[List[Dict[str, Any]]] = None,
+        connectivity_events: Optional[List[Dict[str, Any]]] = None
+    ):
+        """Inyecta contexto maestro global para validación referencial y cruzada entre dominios."""
+        self.integrity_validator.set_master_context(
+            patients_dict=patients_dict,
+            encounters_dict=encounters_dict,
+            devices_dict=devices_dict
+        )
+        if encounters_dict:
+            self.temporal_processor.set_encounters_dict(encounters_dict)
+        if patient_contexts or connectivity_events:
+            self.contextualizer.set_context(
+                patient_contexts=patient_contexts,
+                connectivity_events=connectivity_events
+            )
 
     def process_and_save(
         self,
@@ -77,11 +101,13 @@ class IngestionOrchestrator:
         cleaned_records = self.cleaner.clean(valid_records, audit_log=audit_log)
         # 4.3 Normalización de unidades
         normalized_records = self.unit_normalizer.normalize(cleaned_records, audit_log=audit_log)
-        # 4.4 Chequeo de plausibilidad biológica
+        # 4.4 Chequeo de plausibilidad biológica y dosis
         checked_records = self.plausibility_checker.check(normalized_records, audit_log=audit_log)
-        # 4.5 Procesamiento temporal y latencias
-        temporal_records = self.temporal_processor.process(checked_records)
-        # 4.6 Contextualización
+        # 4.5 Validación de Integridad Referencial y Relacional Cruzada (13 reglas)
+        integrity_records = self.integrity_validator.validate(checked_records, audit_log=audit_log)
+        # 4.6 Procesamiento temporal y latencias
+        temporal_records = self.temporal_processor.process(integrity_records, audit_log=audit_log)
+        # 4.7 Contextualización operacional y de red
         final_records = self.contextualizer.contextualize(temporal_records, audit_log=audit_log)
 
         # 5. Persistencia en Capa CLEAN (Subcarpetas jsonl/ y csv/)

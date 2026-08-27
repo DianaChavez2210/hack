@@ -139,6 +139,7 @@ class PlausibilityChecker:
             v_code = rec.variable_code
             val = rec.converted_value if rec.converted_value is not None else rec.value_numeric
 
+            # 1. Regla PL-01: Chequeo de rangos biológicos plausibles
             if v_code in self.ranges and val is not None:
                 min_val, max_val = self.ranges[v_code]
                 if val < min_val or val > max_val:
@@ -165,5 +166,27 @@ class PlausibilityChecker:
                             corrected_value="OUT_OF_RANGE",
                             details={"plausibility_min": min_val, "plausibility_max": max_val}
                         ))
+
+            # 2. Regla PL-02: Dosis de medicamentos positivas
+            if rec.header_fields and "dose_value" in rec.header_fields:
+                try:
+                    dose_val = float(rec.header_fields["dose_value"])
+                    if dose_val <= 0:
+                        reason = f"Dosis de medicamento no positiva ({dose_val} <= 0) en {rec.record_id}"
+                        rec.plausibility_status = "INVALID_MEDICATION_DOSE"
+                        rec.add_audit_entry(stage="PLAUSIBILITY_CHECK", action="FLAGGED", reason=reason)
+                        if audit_log is not None:
+                            audit_log.append(AuditEntry(
+                                record_id=rec.record_id,
+                                patient_id=rec.patient_id,
+                                source_file=rec.source_file,
+                                variable_code=rec.variable_code or "DOSE",
+                                stage="PLAUSIBILITY_CHECK",
+                                action="FLAGGED",
+                                reason=reason,
+                                details={"rule": "PL-02", "dose_value": dose_val}
+                            ))
+                except (ValueError, TypeError):
+                    pass
 
         return records

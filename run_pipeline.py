@@ -5,6 +5,7 @@ Ejecuta la ingesta completa desde 01_RISA_DATA_V1_0/ hacia data/raw/ y data/clea
 
 import os
 import sys
+import csv
 import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -13,6 +14,54 @@ from typing import Dict, Any, Optional
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 
 from ingestion.orchestrator import IngestionOrchestrator
+
+
+def load_master_context(base_path: Path) -> Dict[str, Any]:
+    """Carga en memoria las tablas maestras para validaciones de integridad referencial y temporal."""
+    patients_dict = {}
+    encounters_dict = {}
+    devices_dict = {}
+    patient_contexts = []
+    connectivity_events = []
+
+    pat_file = base_path / "01_master/patients.csv"
+    if pat_file.exists():
+        with open(pat_file, "r", encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                if row.get("patient_id"):
+                    patients_dict[row["patient_id"]] = row
+
+    enc_file = base_path / "01_master/encounters.csv"
+    if enc_file.exists():
+        with open(enc_file, "r", encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                if row.get("encounter_id"):
+                    encounters_dict[row["encounter_id"]] = row
+
+    dev_file = base_path / "01_master/devices.csv"
+    if dev_file.exists():
+        with open(dev_file, "r", encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                if row.get("device_id"):
+                    devices_dict[row["device_id"]] = row
+
+    ctx_file = base_path / "04_context/patient_context.csv"
+    if ctx_file.exists():
+        with open(ctx_file, "r", encoding="utf-8-sig") as f:
+            patient_contexts = list(csv.DictReader(f))
+
+    conn_file = base_path / "04_context/connectivity_events.csv"
+    if conn_file.exists():
+        with open(conn_file, "r", encoding="utf-8-sig") as f:
+            connectivity_events = list(csv.DictReader(f))
+
+    return {
+        "patients_dict": patients_dict,
+        "encounters_dict": encounters_dict,
+        "devices_dict": devices_dict,
+        "patient_contexts": patient_contexts,
+        "connectivity_events": connectivity_events
+    }
 
 
 def run_risa_ingestion(
@@ -36,6 +85,10 @@ def run_risa_ingestion(
         units_catalog_path=units_cat if os.path.exists(units_cat) else None,
         variable_catalog_path=var_cat if os.path.exists(var_cat) else None
     )
+
+    # Precarga de contexto maestro para validación de las 13 reglas de integridad
+    master_ctx = load_master_context(base_path)
+    orchestrator.set_master_context(**master_ctx)
 
     # Definición completa de tablas objetivo por dominio
     tables_to_ingest = [
